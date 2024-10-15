@@ -2,7 +2,6 @@ import type { NextApiRequest, NextApiResponse } from 'next';
 import { exec } from 'child_process';
 import util from 'util';
 import { kv } from '@vercel/kv';
-import geoip from 'geoip-lite';
 
 const execPromise = util.promisify(exec);
 
@@ -23,14 +22,16 @@ const GEO_CACHE_KEY = 'geo_cache';
 const CACHE_TTL = 60 * 5; // 5 minutes
 const GEO_CACHE_TTL = 60 * 60 * 24 * 7; // 1 week
 
-const isDevelopment = process.env.NODE_ENV === 'development';
+const isVercel = process.env.VERCEL === '1';
 
 async function getGeoData(ip: string, geoCache: GeoCache) {
   if (geoCache[ip] && Date.now() - geoCache[ip].timestamp < GEO_CACHE_TTL * 1000) {
     return geoCache[ip];
   }
 
-  if (isDevelopment) {
+  if (!isVercel) {
+    // Only import geoip-lite if we're not on Vercel
+    const geoip = await import('geoip-lite');
     const geo = geoip.lookup(ip);
     const result = {
       lat: geo ? geo.ll[0] : null,
