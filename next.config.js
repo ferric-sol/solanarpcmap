@@ -6,15 +6,11 @@ const nextConfig = {
       config.resolve.fallback = {
         ...config.resolve.fallback,
         fs: false,
-        child_process: false,
-        util: false,
         net: false,
+        tls: false,
       };
     }
     return config;
-  },
-  images: {
-    domains: ['ip-api.com'],
   },
 };
 

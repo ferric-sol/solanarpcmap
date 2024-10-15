@@ -1,9 +1,8 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { exec } from 'child_process';
 import util from 'util';
-import axios from 'axios';
 import { kv } from '@vercel/kv';
-import { setTimeout } from 'timers/promises';
+import geoip from 'geoip-lite';
 
 const execPromise = util.promisify(exec);
 
@@ -16,33 +15,33 @@ interface Node {
 }
 
 interface GeoCache {
-  [ip: string]: { lat: number; lon: number; timestamp: number };
+  [ip: string]: { lat: number | null; lon: number | null; timestamp: number };
 }
 
 const NODES_CACHE_KEY = 'solana_nodes';
 const GEO_CACHE_KEY = 'geo_cache';
 const CACHE_TTL = 60 * 5; // 5 minutes
 const GEO_CACHE_TTL = 60 * 60 * 24 * 7; // 1 week
-const API_DELAY = 100; // 100ms delay between API calls
+
+const isDevelopment = process.env.NODE_ENV === 'development';
 
 async function getGeoData(ip: string, geoCache: GeoCache) {
   if (geoCache[ip] && Date.now() - geoCache[ip].timestamp < GEO_CACHE_TTL * 1000) {
     return geoCache[ip];
   }
 
-  try {
-    const response = await axios.get(`http://ip-api.com/json/${ip}`);
+  if (isDevelopment) {
+    const geo = geoip.lookup(ip);
     const result = {
-      lat: response.data.lat,
-      lon: response.data.lon,
+      lat: geo ? geo.ll[0] : null,
+      lon: geo ? geo.ll[1] : null,
       timestamp: Date.now()
     };
     geoCache[ip] = result;
     return result;
-  } catch (error) {
-    console.error(`Error fetching geo data for IP ${ip}:`, error);
-    return { lat: null, lon: null, timestamp: Date.now() };
   }
+
+  return { lat: null, lon: null, timestamp: Date.now() };
 }
 
 export default async function handler(
@@ -64,10 +63,7 @@ export default async function handler(
       const lines = stdout.split('\n').filter(line => line.trim() !== '');
       console.log(`Parsed ${lines.length} lines from solana gossip output`);
 
-      nodes = await Promise.all(lines.map(async (line, index) => {
-        // Add delay between processing each node
-        await setTimeout(API_DELAY * index);
-
+      nodes = await Promise.all(lines.map(async (line) => {
         const parts = line.split(/\s+/);
         const ip = parts[0];
         const version = parts[parts.length - 2]; // Version is the second-to-last item
