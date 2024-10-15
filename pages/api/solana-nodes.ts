@@ -51,7 +51,7 @@ export default async function handler(
 ) {
   try {
     let nodes: Node[] | null = await kv.get(NODES_CACHE_KEY);
-    let geoCache: GeoCache = await kv.get(GEO_CACHE_KEY) || {};
+    const geoCache: GeoCache = await kv.get(GEO_CACHE_KEY) || {};
 
     if (!nodes) {
       console.log('Fetching fresh data from solana gossip');
