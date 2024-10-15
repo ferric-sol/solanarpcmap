@@ -3,19 +3,19 @@ import dynamic from 'next/dynamic';
 
 const SolanaMap = dynamic(() => import('../components/SolanaMap'), {
   ssr: false,
+  loading: () => <div>Loading map...</div>
 });
 
 export default function Home() {
   return (
     <div>
       <Head>
-        <title>Solana RPC Map</title>
-        <meta name="description" content="Map of Solana RPC nodes" />
+        <title>Solana Nodes</title>
+        <meta name="description" content="Map of Solana nodes" />
         <link rel="icon" href="/favicon.ico" />
       </Head>
 
       <main>
-        <h1>Solana RPC Map</h1>
         <SolanaMap />
       </main>
     </div>
