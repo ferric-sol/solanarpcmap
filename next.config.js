@@ -13,6 +13,9 @@ const nextConfig = {
     }
     return config;
   },
+  images: {
+    domains: ['ip-api.com'],
+  },
 };
 
 module.exports = nextConfig;
