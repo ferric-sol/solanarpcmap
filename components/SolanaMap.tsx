@@ -1,6 +1,3 @@
-// Add this line at the top of the file
-declare module 'geoip-lite';
-
 import { useState, useEffect } from 'react';
 import { MapContainer, TileLayer, CircleMarker, Popup } from 'react-leaflet';
 import { LatLngExpression } from 'leaflet';
@@ -21,9 +18,16 @@ const SolanaMap = () => {
 
   useEffect(() => {
     const fetchNodes = async () => {
-      const response = await fetch('/api/solana-nodes');
-      const data: Node[] = await response.json();
-      setNodes(data);
+      try {
+        const response = await fetch('/api/solana-nodes');
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        const data: Node[] = await response.json();
+        setNodes(data);
+      } catch (error) {
+        console.error('Error fetching nodes:', error);
+      }
     };
 
     fetchNodes();
