@@ -17,15 +17,19 @@ interface GeoCache {
   [ip: string]: { lat: number | null; lon: number | null; timestamp: number };
 }
 
+interface CachedData {
+  nodes: Node[];
+  lastUpdated: string;
+}
+
 const NODES_CACHE_KEY = 'solana_nodes';
 const GEO_CACHE_KEY = 'geo_cache';
-const CACHE_TTL = 60 * 5; // 5 minutes
-const GEO_CACHE_TTL = 60 * 60 * 24 * 7; // 1 week
+const REFRESH_INTERVAL = 60 * 60 * 1000; // 1 hour in milliseconds
 
 const isVercel = process.env.VERCEL === '1';
 
 async function getGeoData(ip: string, geoCache: GeoCache) {
-  if (geoCache[ip] && Date.now() - geoCache[ip].timestamp < GEO_CACHE_TTL * 1000) {
+  if (geoCache[ip]) {
     return geoCache[ip];
   }
 
@@ -47,48 +51,63 @@ async function getGeoData(ip: string, geoCache: GeoCache) {
 
 export default async function handler(
   req: NextApiRequest,
-  res: NextApiResponse<Node[]>
+  res: NextApiResponse<CachedData>
 ) {
   try {
-    let nodes: Node[] | null = await kv.get(NODES_CACHE_KEY);
+    const cachedData: CachedData | null = await kv.get(NODES_CACHE_KEY);
     const geoCache: GeoCache = await kv.get(GEO_CACHE_KEY) || {};
 
-    if (!nodes) {
-      console.log('Fetching fresh data from solana gossip');
-      const { stdout, stderr } = await execPromise('solana gossip -um');
-      if (stderr) {
-        console.error('stderr:', stderr);
-        throw new Error(stderr);
-      }
+    const now = new Date();
+    let nodes: Node[] = [];
+    let lastUpdated = now.toISOString();
 
-      const lines = stdout.split('\n').filter(line => line.trim() !== '');
-      console.log(`Parsed ${lines.length} lines from solana gossip output`);
-
-      nodes = await Promise.all(lines.map(async (line) => {
-        const parts = line.split(/\s+/);
-        const ip = parts[0];
-        const version = parts[parts.length - 2]; // Version is the second-to-last item
-        const { lat, lon } = await getGeoData(ip, geoCache);
-        return {
-          ip,
-          version,
-          lat,
-          lon,
-          timestamp: new Date().toISOString(),
-        };
-      }));
-
-      console.log(`Processed ${nodes.length} nodes`);
-      console.log('Sample node:', nodes[0]);
-
-      // Store nodes and updated geo cache in KV with expiration
-      await kv.set(NODES_CACHE_KEY, nodes, { ex: CACHE_TTL });
-      await kv.set(GEO_CACHE_KEY, geoCache, { ex: GEO_CACHE_TTL });
+    if (cachedData && (now.getTime() - new Date(cachedData.lastUpdated).getTime() < REFRESH_INTERVAL)) {
+      // Use cached data if it's less than an hour old
+      return res.status(200).json(cachedData);
     }
 
-    res.status(200).json(nodes);
+    console.log('Fetching fresh data from solana gossip');
+    const { stdout, stderr } = await execPromise('solana gossip -um');
+    if (stderr) {
+      console.error('stderr:', stderr);
+      throw new Error(stderr);
+    }
+
+    const lines = stdout.split('\n').filter(line => line.trim() !== '');
+    console.log(`Parsed ${lines.length} lines from solana gossip output`);
+
+    nodes = await Promise.all(lines.map(async (line) => {
+      const parts = line.split(/\s+/);
+      const ip = parts[0];
+      const version = parts[parts.length - 2]; // Version is the second-to-last item
+      const { lat, lon } = await getGeoData(ip, geoCache);
+      return {
+        ip,
+        version,
+        lat,
+        lon,
+        timestamp: now.toISOString(),
+      };
+    }));
+
+    console.log(`Processed ${nodes.length} nodes`);
+    console.log('Sample node:', nodes[0]);
+
+    const newCachedData: CachedData = { nodes, lastUpdated };
+
+    // Store nodes and updated geo cache in KV without expiration
+    await kv.set(NODES_CACHE_KEY, newCachedData);
+    await kv.set(GEO_CACHE_KEY, geoCache);
+
+    res.status(200).json(newCachedData);
   } catch (error) {
     console.error('Error fetching Solana nodes:', error);
-    res.status(500).json([]);
+    // If there's an error, try to return the last cached data
+    const cachedData: CachedData | null = await kv.get(NODES_CACHE_KEY);
+    if (cachedData) {
+      res.status(200).json(cachedData);
+    } else {
+      res.status(500).json({ nodes: [], lastUpdated: new Date().toISOString() });
+    }
   }
 }

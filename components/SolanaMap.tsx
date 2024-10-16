@@ -11,8 +11,14 @@ interface Node {
   timestamp: string;
 }
 
+interface CachedData {
+  nodes: Node[];
+  lastUpdated: string;
+}
+
 const SolanaMap = () => {
   const [nodes, setNodes] = useState<Node[]>([]);
+  const [lastUpdated, setLastUpdated] = useState<string>('');
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
@@ -23,8 +29,9 @@ const SolanaMap = () => {
         if (!response.ok) {
           throw new Error(`HTTP error! status: ${response.status}`);
         }
-        const data: Node[] = await response.json();
-        setNodes(data);
+        const data: CachedData = await response.json();
+        setNodes(data.nodes);
+        setLastUpdated(data.lastUpdated);
       } catch (error) {
         console.error('Error fetching nodes:', error);
       } finally {
@@ -78,6 +85,9 @@ const SolanaMap = () => {
                 <p className="text-xl text-gray-600 mt-2">Nodes with Valid Coordinates</p>
               </div>
             </div>
+            <p className="text-center text-gray-500 mt-4">
+              Last updated: {new Date(lastUpdated).toLocaleString()}
+            </p>
           </div>
           <div className="h-[600px] w-full rounded-xl overflow-hidden shadow-2xl flex-grow mb-8">
             <MapContainer center={[20, 0] as LatLngExpression} zoom={3} style={{ height: '100%', width: '100%' }}>
