@@ -58,8 +58,6 @@ export default async function handler(
     const geoCache: GeoCache = await kv.get(GEO_CACHE_KEY) || {};
 
     const now = new Date();
-    let nodes: Node[] = [];
-    let lastUpdated = now.toISOString();
 
     if (cachedData && (now.getTime() - new Date(cachedData.lastUpdated).getTime() < REFRESH_INTERVAL)) {
       // Use cached data if it's less than an hour old
@@ -76,7 +74,7 @@ export default async function handler(
     const lines = stdout.split('\n').filter(line => line.trim() !== '');
     console.log(`Parsed ${lines.length} lines from solana gossip output`);
 
-    nodes = await Promise.all(lines.map(async (line) => {
+    const nodes = await Promise.all(lines.map(async (line) => {
       const parts = line.split(/\s+/);
       const ip = parts[0];
       const version = parts[parts.length - 2]; // Version is the second-to-last item
@@ -93,6 +91,7 @@ export default async function handler(
     console.log(`Processed ${nodes.length} nodes`);
     console.log('Sample node:', nodes[0]);
 
+    const lastUpdated = now.toISOString();
     const newCachedData: CachedData = { nodes, lastUpdated };
 
     // Store nodes and updated geo cache in KV without expiration
